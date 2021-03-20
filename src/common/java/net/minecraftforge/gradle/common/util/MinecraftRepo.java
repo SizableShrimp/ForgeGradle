@@ -57,13 +57,13 @@ import net.minecraftforge.gradle.common.util.VersionJson.OS;
 import net.minecraftforge.srgutils.MinecraftVersion;
 
 public class MinecraftRepo extends BaseRepo {
+    public static final Pattern MCP_CONFIG_VERSION = Pattern.compile("\\d{8}\\.\\d{6}"); //Timestamp: YYYYMMDD.HHMMSS
     private static MinecraftRepo INSTANCE;
     private static final String GROUP = "net.minecraft";
     public static final String MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest.json";
     public static final String CURRENT_OS = OS.getCurrent().getName();
     private static int CACHE_BUSTER = 1;
     private static final MinecraftVersion v1_14_4 = MinecraftVersion.from("1.14.4");
-    private static final Pattern MCP_CONFIG_VERSION = Pattern.compile("\\d{8}\\.\\d{6}"); //Timestamp: YYYYMMDD.HHMMSS
 
     private final Repository repo;
     private final boolean offline;

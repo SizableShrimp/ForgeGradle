@@ -20,8 +20,10 @@
 
 package net.minecraftforge.gradle.userdev;
 
+import com.google.common.collect.Lists;
 import net.minecraftforge.gradle.common.task.*;
 import net.minecraftforge.gradle.common.util.BaseRepo;
+import net.minecraftforge.gradle.common.util.MappingUtil;
 import net.minecraftforge.gradle.common.util.MinecraftRepo;
 import net.minecraftforge.gradle.common.util.MojangLicenseHelper;
 import net.minecraftforge.gradle.common.util.Utils;
@@ -150,7 +152,7 @@ public class UserDevPlugin implements Plugin<Project> {
             task.setReverse(false);
             task.dependsOn(extractSrg);
             task.setSrg(extractSrg.get().getOutput());
-            task.setMappings(extension.getMappings());
+            task.setMappings(DownloadMCPMappingsTask.getMappingFiles(project, extension.getMappings()));
             task.setFormat(IMappingFile.Format.SRG);
             task.setOutput(project.file("build/" + createSrgToMcp.getName() + "/output.srg"));
         });
@@ -159,7 +161,7 @@ public class UserDevPlugin implements Plugin<Project> {
             task.setReverse(true);
             task.dependsOn(extractSrg);
             task.setSrg(extractSrg.get().getOutput());
-            task.setMappings(extension.getMappings());
+            task.setMappings(DownloadMCPMappingsTask.getMappingFiles(project, extension.getMappings()));
         });
 
         extractNatives.configure(task -> {
@@ -204,7 +206,11 @@ public class UserDevPlugin implements Plugin<Project> {
 
             dlMappingsNew.configure(task -> {
                 task.setMappings(updateChannel + "_" + updateVersion);
-                task.setOutput(project.file("build/mappings_new.zip"));
+                if (MappingUtil.isChannelMerged(updateChannel)) {
+                    task.setOutput(Lists.newArrayList(project.file("build/mappings_new_official.zip"), project.file("build/mappings_new_mcp.zip")));
+                } else {
+                    task.setOutput(Lists.newArrayList(project.file("build/mappings_new.zip")));
+                }
             });
 
             toMCPNew.configure(task -> {

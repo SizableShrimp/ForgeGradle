@@ -39,6 +39,7 @@ import java.util.zip.ZipFile;
 import org.apache.commons.io.IOUtils;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 
@@ -53,7 +54,7 @@ public class TaskCreateExc extends DefaultTask {
     private File srg;
     private File statics;
     private File constructors;
-    private File mappings;
+    private List<File> mappings;
     private File output = getProject().file("build/" + getName() + "/output.exc");
 
     @TaskAction
@@ -164,7 +165,7 @@ public class TaskCreateExc extends DefaultTask {
 
     private Map<String, String> loadMappings() throws IOException {
         Map<String, String> names = new HashMap<>();
-        try (ZipFile zip = new ZipFile(getMappings())) {
+        try (ZipFile zip = new ZipFile(getMappings().get(0))) {
             zip.stream().filter(e -> e.getName().equals("fields.csv") || e.getName().equals("methods.csv")).forEach(e -> {
                 try (NamedCsvReader reader = NamedCsvReader.builder().build(new InputStreamReader(zip.getInputStream(e)))) {
                     reader.forEach(row -> names.put(row.getField("searge"), row.getField("name")));
@@ -197,11 +198,11 @@ public class TaskCreateExc extends DefaultTask {
     public void setConstructors(File value) {
         this.constructors = value;
     }
-    @InputFile
-    public File getMappings() {
+    @InputFiles
+    public List<File> getMappings() {
         return mappings;
     }
-    public void setMappings(File value) {
+    public void setMappings(List<File> value) {
         this.mappings = value;
     }
 

@@ -20,6 +20,7 @@
 
 package net.minecraftforge.gradle.mcp;
 
+import com.google.common.collect.ImmutableList;
 import net.minecraftforge.artifactural.api.artifact.ArtifactIdentifier;
 import net.minecraftforge.artifactural.api.repository.ArtifactProvider;
 import net.minecraftforge.artifactural.api.repository.Repository;
@@ -34,8 +35,10 @@ import net.minecraftforge.gradle.common.util.BaseRepo;
 import net.minecraftforge.gradle.common.util.HashFunction;
 import net.minecraftforge.gradle.common.util.HashStore;
 import net.minecraftforge.gradle.common.util.ManifestJson;
+import net.minecraftforge.gradle.common.util.MappingUtil;
 import net.minecraftforge.gradle.common.util.MavenArtifactDownloader;
 import net.minecraftforge.gradle.common.util.McpNames;
+import net.minecraftforge.gradle.common.util.McpRenamer;
 import net.minecraftforge.gradle.common.util.MinecraftRepo;
 import net.minecraftforge.gradle.common.util.POMBuilder;
 import net.minecraftforge.gradle.common.util.Utils;
@@ -43,7 +46,6 @@ import net.minecraftforge.gradle.common.util.VersionJson;
 import net.minecraftforge.gradle.mcp.util.MCPRuntime;
 import net.minecraftforge.gradle.mcp.util.MCPWrapper;
 import net.minecraftforge.srgutils.IMappingFile;
-import net.minecraftforge.srgutils.IRenamer;
 import net.minecraftforge.srgutils.IMappingFile.IClass;
 import net.minecraftforge.srgutils.IMappingFile.IField;
 import net.minecraftforge.srgutils.IMappingFile.IMethod;
@@ -210,7 +212,7 @@ public class MCPRepo extends BaseRepo {
             .add("mcp", mcp);
     }
 
-    private File getMCP(String version) throws IOException {
+    private File getMCP(String version) {
         return MavenArtifactDownloader.manual(project, "de.oceanlabs.mcp:mcp_config:" + version + "@zip", false);
     }
 
@@ -362,15 +364,19 @@ public class MCPRepo extends BaseRepo {
     private File findNames(String mapping) throws IOException {
         int idx = mapping.lastIndexOf('_');
         if (idx == -1) return null; //Invalid format
-        String channel = mapping.substring(0, idx);
-        String version = mapping.substring(idx + 1);
+        // Extract official mappings, basically do nothing if it's not "official_snapshot" or "official_stable", but convert to "official" if it is for now.
+        ImmutableList<String> separated = MappingUtil.extractOfficialMappingSeparated(mapping);
+        String channel = separated.get(0);
+        String version = separated.get(1);
 
-        if ("official".equals(channel)) {
-            return findOfficialMapping(version);
-        } else if ("snapshot".equals(channel) || "snapshot_nodoc".equals(channel) || "stable".equals(channel) || "stable_nodoc".equals(channel)) { //MCP
-            String desc = "de.oceanlabs.mcp:mcp_" + channel + ":" + version + "@zip";
-            debug("    Mapping: " + desc);
-            return MavenArtifactDownloader.manual(project, desc, false);
+        switch (channel) {
+            case "official": // Official (+ MCP)
+                return findOfficialMapping(version);
+            case "snapshot":
+            case "snapshot_nodoc":
+            case "stable":
+            case "stable_nodoc": // MCP
+                return findMcpMapping(channel, version);
         }
         //TODO? Yarn/Other crowdsourcing?
         throw new IllegalArgumentException("Unknown mapping provider: " + mapping);
@@ -406,17 +412,7 @@ public class MCPRepo extends BaseRepo {
                 input = input.reverse().chain(input); //SRG->OBF + OBF->SRG = SRG->SRG
 
             McpNames map = loadMCPNames(mapping, names);
-            IMappingFile ret = input.rename(new IRenamer() {
-                @Override
-                public String rename(IField value) {
-                    return map.rename(value.getMapped());
-                }
-
-                @Override
-                public String rename(IMethod value) {
-                    return map.rename(value.getMapped());
-                }
-            });
+            IMappingFile ret = input.rename(new McpRenamer.Builder(map).renameFields().renameMethods().build());
 
             ret.write(file.toPath(), format, reverse);
             cache.save();
@@ -448,10 +444,16 @@ public class MCPRepo extends BaseRepo {
         return extra;
     }
 
+    private File findMcpMapping(String channel, String version) {
+        String desc = "de.oceanlabs.mcp:mcp_" + channel + ":" + version + "@zip";
+        debug("    Mapping: " + desc);
+        return MavenArtifactDownloader.manual(project, desc, false);
+    }
+
     private File findOfficialMapping(String version) throws IOException {
         String mcpversion = version;
         int idx = version.lastIndexOf('-');
-        if (idx != -1 && version.substring(idx + 1).matches("\\d{8}\\.\\d{6}")) { //Timestamp, so lets assume that's the MCP part.
+        if (idx != -1 && MinecraftRepo.MCP_CONFIG_VERSION.matcher(version.substring(idx + 1)).matches()) { //Timestamp, so lets assume that's the MCP part.
             //mcpversion = version.substring(idx);
             version = version.substring(0, idx);
         }

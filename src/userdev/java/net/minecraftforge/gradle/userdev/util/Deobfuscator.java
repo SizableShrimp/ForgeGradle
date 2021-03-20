@@ -48,7 +48,9 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Random;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -109,8 +111,8 @@ public class Deobfuscator {
     public File deobfBinary(File original, String mappings, String... cachePath) throws IOException {
         project.getLogger().debug("Deobfuscating binary file {} with mappings {}", original.getName(), mappings);
 
-        File names = findMapping(mappings);
-        if (names == null || !names.exists()) {
+        List<File> names = findMapping(mappings);
+        if (names == null || names.stream().anyMatch(n -> !n.exists())) {
             return null;
         }
 
@@ -119,7 +121,7 @@ public class Deobfuscator {
 
         HashStore cache = new HashStore()
                 .load(input)
-                .add("names", names)
+                .add(names)
                 .add("orig", original);
 
         if (!cache.isSame() || !output.exists()) {
@@ -141,8 +143,8 @@ public class Deobfuscator {
     public File deobfSources(File original, String mappings, String... cachePath) throws IOException {
         project.getLogger().debug("Deobfuscating sources file {} with mappings {}", original.getName(), mappings);
 
-        File names = findMapping(mappings);
-        if (names == null || !names.exists()) {
+        List<File> names = findMapping(mappings);
+        if (names == null || names.stream().anyMatch(n -> !n.exists())) {
             return null;
         }
 
@@ -152,7 +154,7 @@ public class Deobfuscator {
 
         HashStore cache = new HashStore()
                 .load(input)
-                .add("names", names)
+                .add(names)
                 .add("orig", original);
 
         if (!cache.isSame() || !output.exists()) {
@@ -186,14 +188,18 @@ public class Deobfuscator {
         return cacheFile;
     }
 
-    private File findMapping(String mapping) {
-        if (mapping == null)
-            return null;
-
+    private List<File> findMapping(String mapping) {
         int idx = mapping.lastIndexOf('_');
+        if (idx == -1)
+            throw new IllegalArgumentException("Invalid mapping string format, must be {channel}_{version}.");
+
         String channel = mapping.substring(0, idx);
         String version = mapping.substring(idx + 1);
-        String desc = MCPRepo.getMappingDep(channel, version);
-        return MavenArtifactDownloader.generate(project, desc, false);
+        return MappingUtil.getMappingResult(channel, version, this::getMappingFile);
+    }
+
+    private File getMappingFile(String channel, String version) {
+        String artifact = MCPRepo.getMappingDep(channel, version);
+        return MavenArtifactDownloader.generate(project, artifact, false);
     }
 }

@@ -22,23 +22,22 @@ package net.minecraftforge.gradle.mcp.task;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
+
+import net.minecraftforge.gradle.common.util.McpRenamer;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 
-import net.minecraftforge.gradle.common.util.MavenArtifactDownloader;
 import net.minecraftforge.gradle.common.util.McpNames;
-import net.minecraftforge.gradle.mcp.MCPRepo;
 import net.minecraftforge.srgutils.IMappingFile;
-import net.minecraftforge.srgutils.IMappingFile.IField;
-import net.minecraftforge.srgutils.IMappingFile.IMethod;
-import net.minecraftforge.srgutils.IRenamer;
 
 public class GenerateSRG extends DefaultTask {
     private File srg;
-    private String mapping;
+    private List<File> mapping;
     private IMappingFile.Format format = IMappingFile.Format.TSRG;
     private boolean notch = false;
     private boolean reverse = false;
@@ -46,37 +45,17 @@ public class GenerateSRG extends DefaultTask {
 
     @TaskAction
     public void apply() throws IOException {
-        File names = findNames(getMappings());
-        if (names == null)
+        if (getMappings() == null || getMappings().stream().anyMatch(f -> !f.exists()))
             throw new IllegalStateException("Invalid mappings: " + getMappings() + " Could not find archive");
 
         IMappingFile input = IMappingFile.load(srg);
         if (!getNotch())
             input = input.reverse().chain(input); // Reverse makes SRG->OBF, chain makes SRG->SRG
 
-        McpNames map = McpNames.load(names);
-        IMappingFile ret = input.rename(new IRenamer() {
-            @Override
-            public String rename(IField value) {
-                return map.rename(value.getMapped());
-            }
-
-            @Override
-            public String rename(IMethod value) {
-                return map.rename(value.getMapped());
-            }
-        });
+        McpNames map = McpNames.load(getMappings());
+        IMappingFile ret = input.rename(new McpRenamer.Builder(map).renameMethods().renameFields().build());
 
         ret.write(getOutput().toPath(), getFormat(), getReverse());
-    }
-
-    private File findNames(String mapping) {
-        int idx = mapping.lastIndexOf('_');
-        if (idx == -1) return null; //Invalid format
-        String channel = mapping.substring(0, idx);
-        String version = mapping.substring(idx + 1);
-        String desc = MCPRepo.getMappingDep(channel, version);
-        return MavenArtifactDownloader.generate(getProject(), desc, false);
     }
 
     @InputFile
@@ -87,11 +66,11 @@ public class GenerateSRG extends DefaultTask {
         this.srg = value;
     }
 
-    @Input
-    public String getMappings() {
+    @InputFiles
+    public List<File> getMappings() {
         return mapping;
     }
-    public void setMappings(String value) {
+    public void setMappings(List<File> value) {
         this.mapping = value;
     }
 

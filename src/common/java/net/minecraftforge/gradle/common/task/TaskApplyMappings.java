@@ -24,6 +24,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
@@ -31,6 +32,7 @@ import org.apache.commons.io.IOUtils;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 
@@ -40,7 +42,7 @@ import net.minecraftforge.gradle.common.util.Utils;
 public class TaskApplyMappings extends DefaultTask {
     private boolean javadocs = false;
     private boolean lambdas = true;
-    private File mappings;
+    private List<File> mappings;
     private File input;
     private File output = getProject().file("build/" + getName() + "/output.zip");
 
@@ -83,8 +85,8 @@ public class TaskApplyMappings extends DefaultTask {
         return input;
     }
 
-    @InputFile
-    public File getMappings() {
+    @InputFiles
+    public List<File> getMappings() {
         return mappings;
     }
 
@@ -105,7 +107,7 @@ public class TaskApplyMappings extends DefaultTask {
         input = clean;
     }
 
-    public void setMappings(File value) {
+    public void setMappings(List<File> value) {
         mappings = value;
     }
 

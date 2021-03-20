@@ -61,15 +61,35 @@ public class McpNames {
     public static McpNames load(File data) throws IOException {
         Map<String, String> names = new HashMap<>();
         Map<String, String> docs = new HashMap<>();
+        populate(data, names, docs, false);
+
+        return new McpNames(HashFunction.SHA1.hash(data), names, docs);
+    }
+
+    public static McpNames load(List<File> mappingFiles) throws IOException {
+        Map<String, String> names = new HashMap<>();
+        Map<String, String> docs = new HashMap<>();
+
+        for (int i = 0; i < mappingFiles.size(); i++) {
+            File mappingFile = mappingFiles.get(i);
+            populate(mappingFile, names, docs, i != 0);
+        }
+
+        return new McpNames(HashFunction.SHA1.hash(mappingFiles), names, docs);
+    }
+
+    private static void populate(File data, Map<String, String> names, Map<String, String> docs, boolean paramDocsOnly) throws IOException {
         try (ZipFile zip = new ZipFile(data)) {
             List<ZipEntry> entries = zip.stream().filter(e -> e.getName().endsWith(".csv")).collect(Collectors.toList());
             for (ZipEntry entry : entries) {
                 try (NamedCsvReader reader = NamedCsvReader.builder().build(new InputStreamReader(zip.getInputStream(entry)))) {
                     String obf = reader.getHeader().contains("searge") ? "searge" : "param";
+                    boolean isParam = obf.equals("param");
                     boolean hasDesc = reader.getHeader().contains("desc");
                     reader.forEach(row -> {
                         String searge = row.getField(obf);
-                        names.put(searge, row.getField("name"));
+                        if (isParam || !paramDocsOnly)
+                            names.put(searge, row.getField("name"));
                         if (hasDesc) {
                             String desc = row.getField("desc");
                             if (!desc.isEmpty())
@@ -79,8 +99,6 @@ public class McpNames {
                 }
             }
         }
-
-        return new McpNames(HashFunction.SHA1.hash(data), names, docs);
     }
 
     private Map<String, String> names;

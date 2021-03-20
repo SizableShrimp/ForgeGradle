@@ -29,6 +29,7 @@ import net.minecraftforge.gradle.common.task.ExtractMCPData;
 import net.minecraftforge.gradle.common.task.ExtractNatives;
 import net.minecraftforge.gradle.common.task.ExtractZip;
 import net.minecraftforge.gradle.common.util.BaseRepo;
+import net.minecraftforge.gradle.common.util.MappingUtil;
 import net.minecraftforge.gradle.common.util.MavenArtifactDownloader;
 import net.minecraftforge.gradle.common.util.MinecraftRepo;
 import net.minecraftforge.gradle.common.util.MojangLicenseHelper;
@@ -76,6 +77,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -545,7 +547,7 @@ public class PatcherPlugin implements Plugin<Project> {
                 for (TaskProvider<GenerateSRG> genSrg : Arrays.asList(createMcp2Srg, createSrg2Mcp, createMcp2Obf)) {
                     genSrg.get().dependsOn(dlMappingsConfig);
                     if (genSrg.get().getMappings() == null) {
-                        genSrg.get().setMappings(dlMappingsConfig.get().getMappings());
+                        genSrg.get().setMappings(dlMappingsConfig.get().getOutput());
                     }
                 }
 
@@ -565,7 +567,11 @@ public class PatcherPlugin implements Plugin<Project> {
             }
             String mcp_version = mcp.getExtensions().findByType(MCPExtension.class).getConfig().getVersion();
             project.getDependencies().add(MC_DEP_CONFIG, "net.minecraft:client:" + mcp_version + ":extra"); //Needs to be client extra, to get the data files.
-            project.getDependencies().add(MC_DEP_CONFIG, MCPRepo.getMappingDep(extension.getMappingChannel(), extension.getMappingVersion())); //Add mappings so that it can be used by reflection tools.
+            List<String> deps = MappingUtil.getMappingResult(extension.getMappingChannel(), extension.getMappingVersion(), MCPRepo::getMappingDep);
+            for (String dep : deps) {
+                //Add mappings so that it can be used by reflection tools.
+                project.getDependencies().add(MC_DEP_CONFIG, dep);
+            }
 
             if (dlMCMetaConfig.get().getMCVersion() == null) {
                 dlMCMetaConfig.get().setMCVersion(extension.mcVersion);
@@ -673,7 +679,7 @@ public class PatcherPlugin implements Plugin<Project> {
                 applyPatches.get().setBase(toMCPClean.getOutput());
                 genPatches.get().setDependsOn(Lists.newArrayList(toMCPClean, dirtyZip));
                 genPatches.get().setBase(toMCPClean.getOutput());
-                genPatches.get().setModified(dirtyZip.getArchivePath());
+                genPatches.get().setModified(dirtyZip.getArchiveFile().get().getAsFile());
             }
 
             {

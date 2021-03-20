@@ -20,10 +20,6 @@
 
 package net.minecraftforge.gradle.userdev;
 
-import net.minecraftforge.artifactural.api.artifact.ArtifactIdentifier;
-import net.minecraftforge.artifactural.api.repository.Repository;
-import net.minecraftforge.artifactural.base.repository.ArtifactProviderBuilder;
-import net.minecraftforge.artifactural.base.repository.SimpleRepository;
 import codechicken.diffpatch.cli.CliOperation;
 import codechicken.diffpatch.cli.PatchOperation;
 import codechicken.diffpatch.util.LoggingOutputStream;
@@ -31,6 +27,10 @@ import codechicken.diffpatch.util.PatchMode;
 import codechicken.diffpatch.util.archiver.ArchiveFormat;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import net.minecraftforge.artifactural.api.artifact.ArtifactIdentifier;
+import net.minecraftforge.artifactural.api.repository.Repository;
+import net.minecraftforge.artifactural.base.repository.ArtifactProviderBuilder;
+import net.minecraftforge.artifactural.base.repository.SimpleRepository;
 import net.minecraftforge.gradle.common.config.Config;
 import net.minecraftforge.gradle.common.config.UserdevConfigV1;
 import net.minecraftforge.gradle.common.config.UserdevConfigV2;
@@ -43,8 +43,10 @@ import net.minecraftforge.gradle.common.util.Artifact;
 import net.minecraftforge.gradle.common.util.BaseRepo;
 import net.minecraftforge.gradle.common.util.HashFunction;
 import net.minecraftforge.gradle.common.util.HashStore;
+import net.minecraftforge.gradle.common.util.MappingUtil;
 import net.minecraftforge.gradle.common.util.MavenArtifactDownloader;
 import net.minecraftforge.gradle.common.util.McpNames;
+import net.minecraftforge.gradle.common.util.McpRenamer;
 import net.minecraftforge.gradle.common.util.POMBuilder;
 import net.minecraftforge.gradle.common.util.RunConfig;
 import net.minecraftforge.gradle.common.util.Utils;
@@ -61,10 +63,6 @@ import net.minecraftforge.gradle.userdev.tasks.RenameJar;
 import net.minecraftforge.gradle.userdev.tasks.RenameJarInPlace;
 import net.minecraftforge.srgutils.IMappingFile;
 import net.minecraftforge.srgutils.MinecraftVersion;
-import net.minecraftforge.srgutils.IMappingFile.IField;
-import net.minecraftforge.srgutils.IMappingFile.IMethod;
-import net.minecraftforge.srgutils.IRenamer;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.gradle.api.Project;
@@ -97,6 +95,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
@@ -394,7 +393,7 @@ public class MinecraftUserRepo extends BaseRepo {
         if (!group.equals(GROUP) || !artifact.getName().equals(NAME) || !version.equals(VERSION))
             return null;
 
-        if ((AT_HASH == null && athash != null) || (AT_HASH != null && !AT_HASH.equals(athash)))
+        if (!Objects.equals(AT_HASH, athash))
             return null;
 
         if (!isPatcher && mappings == null) //net.minecraft in obf names. We don't do that.
@@ -416,7 +415,7 @@ public class MinecraftUserRepo extends BaseRepo {
         }
     }
 
-    private HashStore commonHash(File mapping) {
+    private HashStore commonHash(List<File> mapping) {
         getParents();
         HashStore ret = new HashStore(this.getCacheRoot());
         ret.add(mcp.artifact.getDescriptor(), mcp.getZip());
@@ -426,14 +425,14 @@ public class MinecraftUserRepo extends BaseRepo {
             patcher = patcher.getParent();
         }
         if (mapping != null)
-            ret.add("mapping", mapping);
+            ret.add(mapping);
         if (AT_HASH != null)
             ret.add("ats", AT_HASH);
 
         return ret;
     }
 
-    private File findMapping(String mapping) {
+    private List<File> findMapping(String mapping) {
         if (mapping == null) {
             debug("  FindMappings: Null mappings");
             return null;
@@ -442,17 +441,23 @@ public class MinecraftUserRepo extends BaseRepo {
         int idx = mapping.lastIndexOf('_');
         String channel = mapping.substring(0, idx);
         String version = mapping.substring(idx + 1);
-        String desc = MCPRepo.getMappingDep(channel, version);
-        debug("    Mapping: " + desc);
+        List<String> descs = MappingUtil.getMappingResult(channel, version, MCPRepo::getMappingDep);
+        List<File> deps = descs.stream().map(desc -> MavenArtifactDownloader.generate(project, desc, CHANGING_USERDEV)).collect(Collectors.toList());
 
-        File ret = MavenArtifactDownloader.generate(project, desc, CHANGING_USERDEV);
-        if (ret == null) {
-            String message = "Could not download MCP Mappings: " + desc;
-            debug ("    " + message);
-            project.getLogger().error(message);
-            throw new IllegalStateException(message);
+        for (int i = 0; i < deps.size(); i++) {
+            String desc = descs.get(i);
+            File dep = deps.get(i);
+
+            debug("    Mapping: " + desc);
+            if (dep == null) {
+                String message = "Could not download MCP Mappings: " + desc;
+                debug("    " + message);
+                project.getLogger().error(message);
+                throw new IllegalStateException(message);
+            }
         }
-        return ret;
+
+        return deps;
     }
 
     private File findPom(String mapping, String rand) throws IOException {
@@ -484,7 +489,10 @@ public class MinecraftUserRepo extends BaseRepo {
                 int idx = mapping.lastIndexOf('_');
                 String channel = mapping.substring(0, idx);
                 String version = mapping.substring(idx + 1);
-                builder.dependencies().add(MCPRepo.getMappingDep(channel, version), "compile"); //Runtime?
+                List<String> deps = MappingUtil.getMappingResult(channel, version, MCPRepo::getMappingDep);
+                for (String dep : deps) {
+                    builder.dependencies().add(dep, "compile"); //Runtime?
+                }
             }
 
             Patcher patcher = parent;
@@ -533,9 +541,9 @@ public class MinecraftUserRepo extends BaseRepo {
     }
 
     private File findRaw(String mapping) throws IOException {
-        File names = findMapping(mapping);
+        List<File> names = findMapping(mapping);
         HashStore cache = commonHash(names)
-            .add("codever", "2");
+                .add("codever", "2");
 
         if (mapping != null && names == null) {
             debug("  Finding Raw: Could not find names, exiting");
@@ -887,7 +895,7 @@ public class MinecraftUserRepo extends BaseRepo {
         }
     }
 
-    private McpNames loadMCPNames(String name, File data) throws IOException {
+    private McpNames loadMCPNames(String name, List<File> data) throws IOException {
         McpNames map = mapCache.get(name);
         String hash = HashFunction.SHA1.hash(data);
         if (map == null || !hash.equals(map.hash)) {
@@ -916,7 +924,7 @@ public class MinecraftUserRepo extends BaseRepo {
         return file;
     }
 
-    private File findSrgToMcp(String mapping, File names) throws IOException {
+    private File findSrgToMcp(String mapping, List<File> names) throws IOException {
         if (names == null) {
             debug("Attempted to create SRG to MCP with null MCP mappings: " + mapping);
             throw new IllegalArgumentException("Attempted to create SRG to MCP with null MCP mappings: " + mapping);
@@ -926,8 +934,8 @@ public class MinecraftUserRepo extends BaseRepo {
         File srg = new File(root, srg_name);
 
         HashStore cache = new HashStore()
-            .add("mcp", mcp.getZip())
-            .add("mapping", names)
+                .add("mcp", mcp.getZip())
+                .add(names)
             .load(new File(root, srg_name + ".input"));
 
         if (!cache.isSame() || !srg.exists()) {
@@ -935,17 +943,7 @@ public class MinecraftUserRepo extends BaseRepo {
             byte[] data = mcp.getData("mappings");
             McpNames mcp_names = loadMCPNames(mapping, names);
             IMappingFile obf_to_srg = IMappingFile.load(new ByteArrayInputStream(data));
-            IMappingFile srg_to_named = obf_to_srg.reverse().chain(obf_to_srg).rename(new IRenamer() {
-                @Override
-                public String rename(IField value) {
-                    return mcp_names.rename(value.getMapped());
-                }
-
-                @Override
-                public String rename(IMethod value) {
-                    return mcp_names.rename(value.getMapped());
-                }
-            });
+            IMappingFile srg_to_named = obf_to_srg.reverse().chain(obf_to_srg).rename(new McpRenamer.Builder(mcp_names).renameMethods().renameFields().build());
 
             srg_to_named.write(srg.toPath(), IMappingFile.Format.TSRG, false);
             cache.save();
@@ -1101,7 +1099,7 @@ public class MinecraftUserRepo extends BaseRepo {
             return patched;
         }
 
-        File names = findMapping(mapping);
+        List<File> names = findMapping(mapping);
         if (mapping != null && names == null) {
             debug("  Finding Sources: Mapping not found");
             return null;
@@ -1163,7 +1161,7 @@ public class MinecraftUserRepo extends BaseRepo {
             debug("  Finding Recomp: Sources not found");
             return null;
         }
-        File names = findMapping(mapping);
+        List<File> names = findMapping(mapping);
         if (names == null && mapping != null) {
             debug("  Finding Recomp: Could not find names");
             return null;
@@ -1232,7 +1230,7 @@ public class MinecraftUserRepo extends BaseRepo {
                 debug("    Failed to download original artifact.");
                 return null;
             }
-            debug("    Copying file");
+            debug("    Copying file from " + original.getAbsolutePath() + " to " + target.getAbsolutePath());
             try {
                 FileUtils.copyFile(original, target);
             } catch (IOException e) { //Something screwed up, nuke the file incase its invalid and return nothing.
