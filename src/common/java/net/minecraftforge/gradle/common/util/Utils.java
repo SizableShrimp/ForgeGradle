@@ -28,6 +28,7 @@ import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 
 import groovy.lang.Closure;
+import net.minecraftforge.artifactural.gradle.GradleRepositoryAdapter;
 import net.minecraftforge.gradle.common.config.MCPConfigV1;
 import net.minecraftforge.gradle.common.task.ExtractNatives;
 import net.minecraftforge.gradle.common.util.VersionJson.Download;
@@ -37,6 +38,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.artifacts.repositories.ArtifactRepository;
 import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.util.GradleVersion;
@@ -93,6 +95,7 @@ public class Utils {
     private static final boolean ENABLE_TEST_CERTS = Boolean.parseBoolean(System.getProperty("net.minecraftforge.gradle.test_certs", "true"));
     private static final boolean ENABLE_TEST_GRADLE = Boolean.parseBoolean(System.getProperty("net.minecraftforge.gradle.test_gradle", "true"));
     private static final boolean ENABLE_TEST_JAVA  = Boolean.parseBoolean(System.getProperty("net.minecraftforge.gradle.test_java", "true"));
+    private static final boolean ENABLE_FILTER_REPOS = Boolean.parseBoolean(System.getProperty("net.minecraftforge.gradle.filter_repos", "true"));
 
     public static final Gson GSON = new GsonBuilder()
         .registerTypeAdapter(MCPConfigV1.Step.class, new MCPConfigV1.Step.Deserializer())
@@ -515,19 +518,20 @@ public class Utils {
     }
 
     public static void checkJavaRange(@Nullable JavaVersionParser.JavaVersion minVersionInclusive, @Nullable JavaVersionParser.JavaVersion maxVersionExclusive) {
-        checkRange("java", JavaVersionParser.getCurrentJavaVersion(), minVersionInclusive, maxVersionExclusive, "");
+        checkRange("java", JavaVersionParser.getCurrentJavaVersion(), minVersionInclusive, maxVersionExclusive, "", "");
     }
 
     public static void checkGradleRange(@Nullable GradleVersion minVersionInclusive, @Nullable GradleVersion maxVersionExclusive) {
-        checkRange("Gradle", GradleVersion.current(), minVersionInclusive, maxVersionExclusive, "\nNote: Upgrade your gradle version first before trying to switch to FG4.");
+        checkRange("Gradle", GradleVersion.current(), minVersionInclusive, maxVersionExclusive,
+                "\nNote: Upgrade your gradle version first before trying to switch to FG5.", "");
     }
 
-    private static <T> void checkRange(String name, Comparable<T> current, @Nullable T minVersionInclusive, @Nullable T maxVersionExclusive, String additional) {
+    private static <T> void checkRange(String name, Comparable<T> current, @Nullable T minVersionInclusive, @Nullable T maxVersionExclusive, String additionalMin, String additionalMax) {
         if (minVersionInclusive != null && current.compareTo(minVersionInclusive) < 0)
-            throw new RuntimeException(String.format("Found %s version %s. Minimum required is %s.%s", name, current, minVersionInclusive, additional));
+            throw new RuntimeException(String.format("Found %s version %s. Minimum required is %s.%s", name, current, minVersionInclusive, additionalMin));
 
         if (maxVersionExclusive != null && current.compareTo(maxVersionExclusive) >= 0)
-            throw new RuntimeException(String.format("Found %s version %s. Versions %s and newer are not supported yet.", name, current, maxVersionExclusive));
+            throw new RuntimeException(String.format("Found %s version %s. Versions %s and newer are not supported yet.%s", name, current, maxVersionExclusive, additionalMax));
     }
 
     /**
@@ -543,13 +547,13 @@ public class Utils {
             checkJavaRange(
                 // Minimum must be update 101 as it's the first one to include Let's Encrypt certificates.
                 JavaVersionParser.parseJavaVersion("1.8.0_101"),
-                null //TODO: Add JDK range check to MCPConfig?
+                null
             );
         }
 
         if (ENABLE_TEST_GRADLE) {
             checkGradleRange(
-                GradleVersion.version("6.8.1"),
+                GradleVersion.version("7.0"),
                 null
             );
         }
@@ -666,6 +670,21 @@ public class Utils {
 
             RunConfigGenerator.createIDEGenRunsTasks(extension, prepareRuns, makeSrcDirs, additionalClientArgs);
         });
+    }
+
+    public static void addRepoFilters(Project project) {
+        if (!ENABLE_FILTER_REPOS) return;
+
+        // Modify Repos already present and when they get added
+        project.getRepositories().all(Utils::addMappedFilter);
+    }
+
+    private static void addMappedFilter(ArtifactRepository repository) {
+        // Skip our "Fake" Repos that actually do provide the de-obfuscated Artifacts
+        if (repository instanceof GradleRepositoryAdapter) return;
+
+        // Exclude Artifacts that are being de-obfuscated via ForgeGradle (_mapped_ in version)
+        repository.content(rcd -> rcd.excludeVersionByRegex(".*", ".*", ".*_mapped_.*"));
     }
 
     public static File getMCDir()
