@@ -45,8 +45,8 @@ public class TaskApplyPatches extends DefaultTask {
     private int maxFuzzOffset = -1;
     private PatchMode patchMode = PatchMode.EXACT;
     private String patchesPrefix = "";
-    private boolean verbose = false;
-    private boolean printSummary = false;
+    private boolean verbose = true;
+    private boolean printSummary = true;
     private boolean failOnError = true;
 
     private String originalPrefix = "a/";
