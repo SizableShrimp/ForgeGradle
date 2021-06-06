@@ -109,7 +109,7 @@ public class PatcherPlugin implements Plugin<Project> {
         TaskProvider<GenerateSRG> createMcp2Srg = project.getTasks().register("createMcp2Srg", GenerateSRG.class);
         TaskProvider<GenerateSRG> createMcp2Obf = project.getTasks().register("createMcp2Obf", GenerateSRG.class);
         TaskProvider<GenerateSRG> createSrg2Mcp = project.getTasks().register("createSrg2Mcp", GenerateSRG.class);
-        // TaskProvider<TaskCreateExc> createExc = project.getTasks().register("createExc", TaskCreateExc.class);
+        TaskProvider<TaskCreateExc> createExc = project.getTasks().register("createExc", TaskCreateExc.class);
         TaskProvider<TaskExtractRangeMap> extractRangeConfig = project.getTasks().register("extractRangeMap", TaskExtractRangeMap.class);
         TaskProvider<TaskApplyRangeMap> applyRangeConfig = project.getTasks().register("applyRangeMap", TaskApplyRangeMap.class);
         TaskProvider<TaskApplyRangeMap> applyRangeBaseConfig = project.getTasks().register("applyRangeMapBase", TaskApplyRangeMap.class);
@@ -212,23 +212,23 @@ public class PatcherPlugin implements Plugin<Project> {
             task.setNotch(true);
             task.setReverse(true);
         });
-        // createExc.configure(task -> {
-        //     task.dependsOn(dlMappingsConfig);
-        //     task.setMappings(dlMappingsConfig.get().getOutput());
-        // });
+        createExc.configure(task -> {
+            task.dependsOn(dlMappingsConfig);
+            task.setMappings(dlMappingsConfig.get().getOutput());
+        });
 
         applyRangeConfig.configure(task -> {
             task.dependsOn(extractRangeConfig, createMcp2Srg/*, createExc*/);
             task.setRangeMap(extractRangeConfig.get().getOutput());
             task.setSrgFiles(createMcp2Srg.get().getOutput());
-            // task.setExcFiles(createExc.get().getOutput());
+            task.setExcFiles(createExc.get().getOutput());
         });
         applyRangeBaseConfig.configure(task -> {
             task.setOnlyIf(t -> extension.patches != null);
             task.dependsOn(extractRangeConfig, createMcp2Srg/*, createExc*/);
             task.setRangeMap(extractRangeConfig.get().getOutput());
             task.setSrgFiles(createMcp2Srg.get().getOutput());
-            // task.setExcFiles(createExc.get().getOutput());
+            task.setExcFiles(createExc.get().getOutput());
         });
         genPatches.configure(task -> {
             task.setOnlyIf(t -> extension.patches != null);
@@ -424,32 +424,32 @@ public class PatcherPlugin implements Plugin<Project> {
                         createMcp2Srg.get().dependsOn(ext);
                     }
 
-                    // if (createExc.get().getSrg() == null) {
-                    //     createExc.get().setSrg(createMcp2Srg.get().getSrg());
-                    //     createExc.get().dependsOn(createMcp2Srg);
-                    // }
-                    //
-                    // if (createExc.get().getStatics() == null) {
-                    //     TaskProvider<ExtractMCPData> ext = project.getTasks().register("extractStatic", ExtractMCPData.class);
-                    //     ext.get().dependsOn(dlMCP);
-                    //     ext.get().setConfig(dlMCP.getOutput());
-                    //     ext.get().setKey("statics");
-                    //     ext.get().setAllowEmpty(true);
-                    //     ext.get().setOutput(project.file("build/" + ext.get().getName() + "/output.txt"));
-                    //     createExc.get().setStatics(ext.get().getOutput());
-                    //     createExc.get().dependsOn(ext);
-                    // }
-                    //
-                    // if (createExc.get().getConstructors() == null) {
-                    //     TaskProvider<ExtractMCPData> ext = project.getTasks().register("extractConstructors", ExtractMCPData.class);
-                    //     ext.get().dependsOn(dlMCP);
-                    //     ext.get().setConfig(dlMCP.getOutput());
-                    //     ext.get().setKey("constructors");
-                    //     ext.get().setAllowEmpty(true);
-                    //     ext.get().setOutput(project.file("build/" + ext.get().getName() + "/output.txt"));
-                    //     createExc.get().setConstructors(ext.get().getOutput());
-                    //     createExc.get().dependsOn(ext);
-                    // }
+                    if (createExc.get().getSrg() == null) {
+                        createExc.get().setSrg(createMcp2Srg.get().getSrg());
+                        createExc.get().dependsOn(createMcp2Srg);
+                    }
+
+                    if (createExc.get().getStatics() == null) {
+                        TaskProvider<ExtractMCPData> ext = project.getTasks().register("extractStatic", ExtractMCPData.class);
+                        ext.get().dependsOn(dlMCP);
+                        ext.get().setConfig(dlMCP.getOutput());
+                        ext.get().setKey("statics");
+                        ext.get().setAllowEmpty(true);
+                        ext.get().setOutput(project.file("build/" + ext.get().getName() + "/output.txt"));
+                        createExc.get().setStatics(ext.get().getOutput());
+                        createExc.get().dependsOn(ext);
+                    }
+
+                    if (createExc.get().getConstructors() == null) {
+                        TaskProvider<ExtractMCPData> ext = project.getTasks().register("extractConstructors", ExtractMCPData.class);
+                        ext.get().dependsOn(dlMCP);
+                        ext.get().setConfig(dlMCP.getOutput());
+                        ext.get().setKey("constructors");
+                        ext.get().setAllowEmpty(true);
+                        ext.get().setOutput(project.file("build/" + ext.get().getName() + "/output.txt"));
+                        createExc.get().setConstructors(ext.get().getOutput());
+                        createExc.get().dependsOn(ext);
+                    }
                 } else if (patcher != null) {
                     PatcherExtension pExt = extension.parent.getExtensions().getByType(PatcherExtension.class);
                     extension.copyFrom(pExt);
@@ -493,39 +493,39 @@ public class PatcherPlugin implements Plugin<Project> {
                         }
                     }
 
-                    // if (createExc.get().getSrg() == null) { //TODO: Make a macro for Srg/Static/Constructors
-                    //     ExtractMCPData extract = ((ExtractMCPData)tasks.getByName("extractSrg"));
-                    //     if (extract != null) {
-                    //         createExc.get().setSrg(extract.getOutput());
-                    //         createExc.get().dependsOn(extract);
-                    //     } else {
-                    //         TaskCreateExc task = (TaskCreateExc)tasks.getByName(createExc.get().getName());
-                    //         createExc.get().setSrg(task.getSrg());
-                    //         createExc.get().dependsOn(task);
-                    //     }
-                    // }
-                    // if (createExc.get().getStatics() == null) {
-                    //     ExtractMCPData extract = ((ExtractMCPData) tasks.getByName("extractStatic"));
-                    //     if (extract != null) {
-                    //         createExc.get().setStatics(extract.getOutput());
-                    //         createExc.get().dependsOn(extract);
-                    //     } else {
-                    //         TaskCreateExc task = (TaskCreateExc) tasks.getByName(createExc.get().getName());
-                    //         createExc.get().setStatics(task.getStatics());
-                    //         createExc.get().dependsOn(task);
-                    //     }
-                    // }
-                    // if (createExc.get().getConstructors() == null) {
-                    //     ExtractMCPData extract = ((ExtractMCPData) tasks.getByName("extractConstructors"));
-                    //     if (extract != null) {
-                    //         createExc.get().setConstructors(extract.getOutput());
-                    //         createExc.get().dependsOn(extract);
-                    //     } else {
-                    //         TaskCreateExc task = (TaskCreateExc) tasks.getByName(createExc.get().getName());
-                    //         createExc.get().setConstructors(task.getConstructors());
-                    //         createExc.get().dependsOn(task);
-                    //     }
-                    // }
+                    if (createExc.get().getSrg() == null) { //TODO: Make a macro for Srg/Static/Constructors
+                        ExtractMCPData extract = ((ExtractMCPData)tasks.getByName("extractSrg"));
+                        if (extract != null) {
+                            createExc.get().setSrg(extract.getOutput());
+                            createExc.get().dependsOn(extract);
+                        } else {
+                            TaskCreateExc task = (TaskCreateExc)tasks.getByName(createExc.get().getName());
+                            createExc.get().setSrg(task.getSrg());
+                            createExc.get().dependsOn(task);
+                        }
+                    }
+                    if (createExc.get().getStatics() == null) {
+                        ExtractMCPData extract = ((ExtractMCPData) tasks.getByName("extractStatic"));
+                        if (extract != null) {
+                            createExc.get().setStatics(extract.getOutput());
+                            createExc.get().dependsOn(extract);
+                        } else {
+                            TaskCreateExc task = (TaskCreateExc) tasks.getByName(createExc.get().getName());
+                            createExc.get().setStatics(task.getStatics());
+                            createExc.get().dependsOn(task);
+                        }
+                    }
+                    if (createExc.get().getConstructors() == null) {
+                        ExtractMCPData extract = ((ExtractMCPData) tasks.getByName("extractConstructors"));
+                        if (extract != null) {
+                            createExc.get().setConstructors(extract.getOutput());
+                            createExc.get().dependsOn(extract);
+                        } else {
+                            TaskCreateExc task = (TaskCreateExc) tasks.getByName(createExc.get().getName());
+                            createExc.get().setConstructors(task.getConstructors());
+                            createExc.get().dependsOn(task);
+                        }
+                    }
                     for (TaskProvider<GenerateBinPatches> task : Lists.newArrayList(genJoinedBinPatches, genClientBinPatches, genServerBinPatches)) {
                         GenerateBinPatches pgen = (GenerateBinPatches) tasks.getByName(task.get().getName());
                         for (File patches : pgen.getPatchSets()) {
