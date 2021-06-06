@@ -452,7 +452,7 @@ public class MCPRepo extends BaseRepo {
     private File findOfficialMapping(String version) throws IOException {
         String mcpversion = version;
         int idx = version.lastIndexOf('-');
-        if (idx != -1 && version.substring(idx + 1).matches("\\d{8}\\.\\d{6}")) { //Timestamp, so lets assume that's the MCP part.
+        if (idx != -1 && MinecraftRepo.MCP_CONFIG_VERSION.matcher(version.substring(idx + 1)).matches()) {
             //mcpversion = version.substring(idx);
             version = version.substring(0, idx);
         }
@@ -525,10 +525,10 @@ public class MCPRepo extends BaseRepo {
             String[] header = new String[] {"searge", "name", "side", "desc"};
             List<String[]> fields = new ArrayList<>();
             List<String[]> methods = new ArrayList<>();
-            List<String[]> classes = new ArrayList<>();
+            // List<String[]> classes = new ArrayList<>();
             fields.add(header);
             methods.add(header);
-            classes.add(header);
+            // classes.add(header);
 
             for (String name : cfields.keySet()) {
                 String cname = cfields.get(name);
@@ -550,13 +550,13 @@ public class MCPRepo extends BaseRepo {
                     methods.add(new String[]{name, cname, "0", ""});
             }
 
-            for (IClass cls : pg_client.getClasses()) {
-                IClass obf = srg.getClass(cls.getMapped());
-                boolean onServer = pg_server.getClass(cls.getMapped()) != null;
-                if (obf != null) {
-                    classes.add(new String[]{obf.getMapped(), cls.getOriginal(), onServer ? "2" : "0", ""});
-                }
-            }
+            // for (IClass cls : pg_client.getClasses()) {
+            //     IClass obf = srg.getClass(cls.getMapped());
+            //     boolean onServer = pg_server.getClass(cls.getMapped()) != null;
+            //     if (obf != null) {
+            //         classes.add(new String[]{obf.getMapped(), cls.getOriginal(), onServer ? "2" : "0", ""});
+            //     }
+            // }
 
             sfields.forEach((k,v) -> fields.add(new String[] {k, v, "1", ""}));
             smethods.forEach((k,v) -> methods.add(new String[] {k, v, "1", ""}));
@@ -567,11 +567,11 @@ public class MCPRepo extends BaseRepo {
             try (FileOutputStream fos = new FileOutputStream(mappings);
                  ZipOutputStream out = new ZipOutputStream(fos)) {
 
-                out.putNextEntry(Utils.getStableEntry("classes.csv"));
-                try (CsvWriter writer = CsvWriter.builder().lineDelimiter(LineDelimiter.LF).build(new UncloseableOutputStreamWritter(out))) {
-                    classes.forEach(writer::writeRow);
-                }
-                out.closeEntry();
+                // out.putNextEntry(Utils.getStableEntry("classes.csv"));
+                // try (CsvWriter writer = CsvWriter.builder().lineDelimiter(LineDelimiter.LF).build(new UncloseableOutputStreamWritter(out))) {
+                //     classes.forEach(writer::writeRow);
+                // }
+                // out.closeEntry();
 
                 out.putNextEntry(Utils.getStableEntry("fields.csv"));
                 try (CsvWriter writer = CsvWriter.builder().lineDelimiter(LineDelimiter.LF).build(new UncloseableOutputStreamWritter(out))) {

@@ -165,7 +165,7 @@ public class TaskCreateExc extends DefaultTask {
     private Map<String, String> loadMappings() throws IOException {
         Map<String, String> names = new HashMap<>();
         try (ZipFile zip = new ZipFile(getMappings())) {
-            zip.stream().filter(e -> e.getName().equals("fields.csv") || e.getName().equals("methods.csv") || e.getName().equals("classes.csv")).forEach(e -> {
+            zip.stream().filter(e -> e.getName().equals("fields.csv") || e.getName().equals("methods.csv")/* || e.getName().equals("classes.csv")*/).forEach(e -> {
                 try (NamedCsvReader reader = NamedCsvReader.builder().build(new InputStreamReader(zip.getInputStream(e)))) {
                     reader.forEach(row -> names.put(row.getField("searge"), row.getField("name")));
                 } catch (IOException e1) {

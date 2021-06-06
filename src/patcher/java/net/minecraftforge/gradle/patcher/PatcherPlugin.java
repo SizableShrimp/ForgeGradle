@@ -419,7 +419,7 @@ public class PatcherPlugin implements Plugin<Project> {
                         TaskProvider<ExtractMCPData> ext = project.getTasks().register("extractSrg", ExtractMCPData.class);
                         ext.get().dependsOn(dlMCP, dlMappingsConfig);
                         ext.get().setConfig(dlMCP.getOutput());
-                        ext.get().setMappings(MavenArtifactDownloader.generate(project, MCPRepo.getMappingDep(extension.getMappingChannel(), extension.getMappingVersion()), false));
+                        ext.get().setMappingsVersion(extension.getMappingVersion());
                         createMcp2Srg.get().setSrg(ext.get().getOutput());
                         createMcp2Srg.get().dependsOn(ext);
                     }

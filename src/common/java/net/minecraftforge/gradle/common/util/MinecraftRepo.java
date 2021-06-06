@@ -63,7 +63,7 @@ public class MinecraftRepo extends BaseRepo {
     public static final String CURRENT_OS = OS.getCurrent().getName();
     private static int CACHE_BUSTER = 1;
     private static final MinecraftVersion v1_14_4 = MinecraftVersion.from("1.14.4");
-    private static final Pattern MCP_CONFIG_VERSION = Pattern.compile("\\d{8}\\.\\d{6}"); //Timestamp: YYYYMMDD.HHMMSS
+    public static final Pattern MCP_CONFIG_VERSION = Pattern.compile("\\d{8}\\.\\d{6}"); //Timestamp: YYYYMMDD.HHMMSS
 
     private final Repository repo;
     private final boolean offline;
@@ -181,6 +181,15 @@ public class MinecraftRepo extends BaseRepo {
         int idx = version.lastIndexOf('-');
         if (idx != -1 && MCP_CONFIG_VERSION.matcher(version.substring(idx + 1)).matches()) {
             return version.substring(0, idx);
+        }
+        return version;
+    }
+
+    public static String getMCPVersion(String version) {
+        int idx = version.lastIndexOf('-');
+        String mcpversion = version.substring(idx + 1);
+        if (idx != -1 && MCP_CONFIG_VERSION.matcher(mcpversion).matches()) {
+            return mcpversion;
         }
         return version;
     }
