@@ -22,6 +22,8 @@ package net.minecraftforge.gradle.mcp.task;
 
 import java.io.File;
 import java.io.IOException;
+
+import net.minecraftforge.srgutils.IMappingBuilder;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
@@ -39,7 +41,7 @@ import net.minecraftforge.srgutils.IRenamer;
 public class GenerateSRG extends DefaultTask {
     private File srg;
     private String mapping;
-    private IMappingFile.Format format = IMappingFile.Format.TSRG;
+    private IMappingFile.Format format = IMappingFile.Format.TSRG2;
     private boolean notch = false;
     private boolean reverse = false;
     private File output = getProject().file("build/" + getName() + "/output.tsrg");
@@ -57,6 +59,11 @@ public class GenerateSRG extends DefaultTask {
         McpNames map = McpNames.load(names);
         IMappingFile ret = input.rename(new IRenamer() {
             @Override
+            public String rename(IMappingFile.IClass value) {
+                return map.rename(value.getMapped());
+            }
+
+            @Override
             public String rename(IField value) {
                 return map.rename(value.getMapped());
             }
@@ -65,9 +72,28 @@ public class GenerateSRG extends DefaultTask {
             public String rename(IMethod value) {
                 return map.rename(value.getMapped());
             }
-        });
+        }).reverse().rename(new IRenamer() {
+            @Override
+            public String rename(IMappingFile.IClass value) {
+                return value.getOriginal();
+            }
+        }).reverse();
+        // IMappingBuilder builder = IMappingBuilder.create();
+        // for (IMappingFile.IClass cls : ret.getClasses()) {
+        //     IMappingBuilder.IClass newCls = builder.addClass(cls.getMapped(), cls.getMapped());
+        //     for (IMethod method : cls.getMethods()) {
+        //         IMappingBuilder.IMethod newMethod = newCls.method(method.getDescriptor(), method.getOriginal(), method.getMapped());
+        //         for (IMappingFile.IParameter param : method.getParameters()) {
+        //             newMethod.parameter(param.getIndex(), param.getOriginal(), param.getMapped());
+        //         }
+        //     }
+        //     for (IField field : cls.getFields()) {
+        //         newCls.field(field.getOriginal(), field.getMapped());
+        //     }
+        // }
 
         ret.write(getOutput().toPath(), getFormat(), getReverse());
+        // builder.build().getMap("left", "right").write(getOutput().toPath(), getFormat(), getReverse());
     }
 
     private File findNames(String mapping) {

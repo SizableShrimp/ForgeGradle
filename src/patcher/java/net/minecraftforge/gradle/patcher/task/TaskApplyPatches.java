@@ -114,8 +114,8 @@ public class TaskApplyPatches extends DefaultTask {
     @Input                    public int getMaxFuzzOffset() { return maxFuzzOffset; }
     @Input          @Optional public PatchMode getPatchMode() { return patchMode; }
     @Input          @Optional public String getPatchesPrefix() { return patchesPrefix; }
-    @Input                    public boolean isVerbose() { return verbose; }
-    @Input                    public boolean isPrintSummary() { return printSummary; }
+    @Internal                 public boolean isVerbose() { return verbose; }
+    @Internal                 public boolean isPrintSummary() { return printSummary; }
     @Input                    public boolean isFailOnError() { return failOnError; }
     @Input          @Optional public String getOriginalPrefix() { return originalPrefix; }
     @Input          @Optional public String getModifiedPrefix() { return modifiedPrefix; }

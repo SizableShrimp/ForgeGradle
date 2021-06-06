@@ -28,10 +28,14 @@ import java.util.function.Supplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import net.minecraftforge.gradle.common.util.McpNames;
+import net.minecraftforge.srgutils.IMappingFile;
+import net.minecraftforge.srgutils.IRenamer;
 import org.apache.commons.io.IOUtils;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
 
@@ -42,6 +46,7 @@ public class ExtractMCPData extends DefaultTask {
     private String key = "mappings";
     private Supplier<File> configSupplier;
     private File config;
+    private File mappings;
     private boolean allowEmpty = false;
     private File output = getProject().file("build/" + getName() + "/output.srg");
 
@@ -68,6 +73,17 @@ public class ExtractMCPData extends DefaultTask {
             try (OutputStream out = new FileOutputStream(getOutput())) {
                 IOUtils.copy(zip.getInputStream(entry), out);
             }
+        }
+        
+        if (getMappings() != null && getOutput().exists()) {
+            McpNames map = McpNames.load(getMappings());
+            IMappingFile srg = IMappingFile.load(getOutput());
+            srg.rename(new IRenamer() {
+                @Override
+                public String rename(IMappingFile.IClass value) {
+                    return map.rename(value.getMapped());
+                }
+            }).write(getOutput().toPath(), IMappingFile.Format.TSRG2, false);
         }
     }
 
@@ -120,5 +136,14 @@ public class ExtractMCPData extends DefaultTask {
     }
     public void setOutput(File value) {
         this.output = value;
+    }
+
+    @InputFile
+    @Optional
+    public File getMappings() {
+        return mappings;
+    }
+    public void setMappings(File mappings) {
+        this.mappings = mappings;
     }
 }
