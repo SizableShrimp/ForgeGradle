@@ -175,7 +175,7 @@ public class Artifact implements ArtifactIdentifier, Comparable<Artifact> {
         if (isSnapshot) {
             //TODO: Timestamps
         }
-        if ((ret = classifier.compareTo(o.classifier)) != 0) return ret;
+        if (classifier != null && (ret = classifier.compareTo(o.classifier)) != 0) return ret;
         return ext.compareTo(o.ext);
     }
 }
