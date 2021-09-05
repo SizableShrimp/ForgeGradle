@@ -446,7 +446,7 @@ public class MinecraftUserRepo extends BaseRepo {
         } else {
             switch (classifier) {
                 case "":        return findRaw(mappings);
-                case "sources": return findSource(mappings, true);
+                case "sources": return Boolean.getBoolean("net.minecraftforge.gradle.disablesourcejar") ? null : findSource(mappings, true);
                 default:        return findExtraClassifier(mappings, classifier, ext);
             }
         }
