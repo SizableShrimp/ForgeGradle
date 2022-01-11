@@ -55,6 +55,10 @@ import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencySet;
 import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository.MetadataSources;
+import org.gradle.api.attributes.Attribute;
+import org.gradle.api.attributes.AttributeContainer;
+import org.gradle.api.component.AdhocComponentWithVariants;
+import org.gradle.api.component.SoftwareComponentFactory;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.SourceDirectorySet;
 import org.gradle.api.logging.Logger;
@@ -76,10 +80,21 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import javax.inject.Inject;
 
 public class UserDevPlugin implements Plugin<Project> {
     private static final String MINECRAFT = "minecraft";
+    public static final String RUNTIME_ELEMENTS_EXCLUDE_MAPPED_CONFIGURATION = "runtimeElementsExcludeMapped";
+    public static final String API_ELEMENTS_EXCLUDE_MAPPED_CONFIGURATION = "apiElementsExcludeMapped";
     public static final String OBF = "__obfuscated";
+    public static final Attribute<Boolean> FORGEGRADLE_OBF_ATTRIBUTE = Attribute.of("forgegradle.obf", Boolean.class);
+    private final SoftwareComponentFactory softwareComponentFactory;
+
+    @Inject
+    public UserDevPlugin(SoftwareComponentFactory softwareComponentFactory) {
+        this.softwareComponentFactory = softwareComponentFactory;
+    }
 
     @Override
     public void apply(@Nonnull Project project) {
@@ -98,9 +113,15 @@ public class UserDevPlugin implements Plugin<Project> {
         project.getConfigurations().named(JavaPlugin.IMPLEMENTATION_CONFIGURATION_NAME)
                 .configure(c -> c.extendsFrom(minecraft));
 
+        Configuration runtimeElements = project.getConfigurations().findByName("runtimeElements");
+        Configuration apiElements = project.getConfigurations().findByName("apiElements");
+        final Configuration runtimeElementsExcludeMapped = createExcludeMappedConfiguration(project, runtimeElements, RUNTIME_ELEMENTS_EXCLUDE_MAPPED_CONFIGURATION);
+        final Configuration apiElementsExcludeMapped = createExcludeMappedConfiguration(project, apiElements, API_ELEMENTS_EXCLUDE_MAPPED_CONFIGURATION);
+
         // Let gradle handle the downloading by giving it a configuration to dl. We'll focus on applying mappings to it.
         final Configuration internalObfConfiguration = project.getConfigurations().create(OBF);
         internalObfConfiguration.setDescription("Generated scope for obfuscated dependencies");
+        internalObfConfiguration.attributes(attributes -> attributes.attribute(FORGEGRADLE_OBF_ATTRIBUTE, true));
 
         // Create extension for dependency remapping
         // Can't create at top-level or put in `minecraft` ext due to configuration name conflict
@@ -147,6 +168,12 @@ public class UserDevPlugin implements Plugin<Project> {
             task.getOutput().set(nativesFolder);
         });
         downloadAssets.configure(task -> task.getMeta().set(downloadMCMeta.flatMap(DownloadMCMeta::getOutput)));
+
+        AdhocComponentWithVariants forgegradleComponent = softwareComponentFactory.adhoc("forgegradle");
+        project.getComponents().add(forgegradleComponent);
+
+        forgegradleComponent.addVariantsFromConfiguration(runtimeElementsExcludeMapped, details -> details.mapToMavenScope("runtime"));
+        forgegradleComponent.addVariantsFromConfiguration(apiElementsExcludeMapped, details -> details.mapToMavenScope("compile"));
 
         final boolean doingUpdate = project.hasProperty("UPDATE_MAPPINGS");
         final String updateVersion = doingUpdate ? (String) project.property("UPDATE_MAPPINGS") : null;
@@ -288,12 +315,54 @@ public class UserDevPlugin implements Plugin<Project> {
                 project.getLogger().warn("Failed to retrieve asset index ID", e);
             }
 
+            if (runtimeElements != null) {
+                runtimeElementsExcludeMapped.getDependencies().addAll(runtimeElements.getAllDependencies());
+            }
+            if (apiElements != null) {
+                apiElementsExcludeMapped.getDependencies().addAll(apiElements.getAllDependencies());
+            }
+
+            for (ExternalModuleDependency obfDep : internalObfConfiguration.getDependencies().withType(ExternalModuleDependency.class)) {
+                ExternalModuleDependency remappedDep = remapper.remapExternalModule(obfDep, extension.getMappings().get());
+                replaceRemappedDep(runtimeElementsExcludeMapped, obfDep, remappedDep);
+                replaceRemappedDep(apiElementsExcludeMapped, obfDep, remappedDep);
+            }
+
+            runtimeElementsExcludeMapped.getDependencies().removeAll(minecraft.getAllDependencies());
+            apiElementsExcludeMapped.getDependencies().removeAll(minecraft.getAllDependencies());
+
             // Finalize asset index
             final String finalAssetIndex = assetIndex;
 
             extension.getRuns().forEach(runConfig -> runConfig.token("asset_index", finalAssetIndex));
             Utils.createRunConfigTasks(extension, extractNatives, downloadAssets, createSrgToMcp);
         });
+    }
+
+    private Configuration createExcludeMappedConfiguration(Project project, @Nullable Configuration original, String name) {
+        final Configuration excludeMapped = project.getConfigurations().create(name);
+
+        excludeMapped.setCanBeConsumed(true);
+        excludeMapped.setCanBeResolved(false);
+
+        if (original != null) {
+            for (Attribute<?> attribute : original.getAttributes().keySet()) {
+                copyAttribute(original, excludeMapped, attribute);
+            }
+        }
+
+        return excludeMapped;
+    }
+
+    private void replaceRemappedDep(Configuration excludeMapped, ExternalModuleDependency obfDep, ExternalModuleDependency remappedDep) {
+        if (excludeMapped.getDependencies().contains(remappedDep)) {
+            excludeMapped.getDependencies().remove(remappedDep);
+            excludeMapped.getDependencies().add(obfDep);
+        }
+    }
+
+    private <T> AttributeContainer copyAttribute(Configuration original, Configuration destination, Attribute<T> attribute) {
+        return destination.getAttributes().attribute(attribute, original.getAttributes().getAttribute(attribute));
     }
 
     private NamedDomainObjectContainer<RenameJarInPlace> createReobfExtension(Project project) {

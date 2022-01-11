@@ -67,6 +67,12 @@ public class DependencyRemapper {
         return newDep;
     }
 
+    public ExternalModuleDependency remapExternalModule(ExternalModuleDependency dependency, String mappings) {
+        ExternalModuleDependency newDep = dependency.copy();
+        newDep.version(v -> v.strictly(newDep.getVersion() + "_mapped_" + mappings));
+        return newDep;
+    }
+
     public void attachMappings(String mappings) {
         mappingListeners.forEach(l -> l.accept(mappings));
     }
