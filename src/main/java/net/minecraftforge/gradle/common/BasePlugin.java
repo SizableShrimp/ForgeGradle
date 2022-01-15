@@ -23,6 +23,8 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.ResolutionStrategy;
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository;
 import org.gradle.api.tasks.Delete;
 import org.gradle.testfixtures.ProjectBuilder;
@@ -58,12 +60,24 @@ public abstract class BasePlugin<K extends BaseExtension> implements Plugin<Proj
         project.getExtensions().create(Constants.EXT_NAME_MC, getExtensionClass(), project);
         project.getExtensions().create(Constants.EXT_NAME_JENKINS, JenkinsExtension.class, project);
 
+        project.getConfigurations().all(new Action<Configuration>() {
+            @Override
+            public void execute(Configuration configuration) {
+                configuration.resolutionStrategy(new Closure<Object>(configuration) {
+                    public Object doCall(ResolutionStrategy resolutionStrategy) {
+                        resolutionStrategy.force("net.sourceforge.argo:argo:3.4");
+                        return null;
+                    }
+                });
+            }
+        });
+
         // repos
         project.allprojects(new Action<Project>() {
             @Override
             public void execute(Project proj)
             {
-                addMavenRepo(proj, "forge", "http://files.minecraftforge.net/maven");
+                addMavenRepo(proj, "forge", "https://maven.minecraftforge.net");
                 proj.getRepositories().mavenCentral();
                 addMavenRepo(proj, "minecraft", Constants.LIBRARY_URL);
             }
