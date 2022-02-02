@@ -28,6 +28,7 @@ import org.gradle.api.file.FileVisitor;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.specs.Spec;
+import org.gradle.api.tasks.Console;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.Internal;
@@ -79,6 +80,10 @@ public abstract class SignJar extends DefaultTask implements PatternFilterable {
             map.put("keypass", getKeyPass().get());
         if (getKeyStore().isPresent())
             map.put("keyStore", getKeyStore().get());
+        if (getStoreType().isPresent())
+            map.put("storetype", getStoreType().get());
+        if (isVerbose().get() == Boolean.TRUE)
+            map.put("verbose", "true");
 
         getProject().getAnt().invokeMethod("signjar", map);
 
@@ -178,6 +183,13 @@ public abstract class SignJar extends DefaultTask implements PatternFilterable {
     @Input
     @Optional
     public abstract Property<String> getKeyStore();
+
+    @Input
+    @Optional
+    public abstract Property<String> getStoreType();
+
+    @Console
+    public abstract Property<Boolean> isVerbose();
 
     @Override
     public PatternFilterable exclude(String... arg0) {
