@@ -96,11 +96,11 @@ public abstract class MinecraftExtension extends GroovyObjectSupport {
         CharSequence channel = mappings.get("channel");
         CharSequence version = mappings.get("version");
 
-        if (channel == null || version == null) {
+        if (channel == null || (!"none".equals(channel) && version == null)) {
             throw new IllegalArgumentException("Must specify both mappings channel and version");
         }
 
-        mappings(channel.toString(), version.toString());
+        mappings(channel.toString(), version == null ? null : version.toString());
     }
 
     public ConfigurableFileCollection getAccessTransformers() {

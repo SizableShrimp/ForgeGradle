@@ -33,6 +33,7 @@ import net.minecraftforge.gradle.common.tasks.ExtractNatives;
 import net.minecraftforge.gradle.common.tasks.ExtractRangeMap;
 import net.minecraftforge.gradle.common.util.BaseRepo;
 import net.minecraftforge.gradle.common.util.EnvironmentChecks;
+import net.minecraftforge.gradle.common.util.MinecraftExtension;
 import net.minecraftforge.gradle.common.util.MinecraftRepo;
 import net.minecraftforge.gradle.common.util.MojangLicenseHelper;
 import net.minecraftforge.gradle.common.util.Utils;
@@ -135,10 +136,10 @@ public class UserDevPlugin implements Plugin<Project> {
         final TaskProvider<DefaultTask> showLicense = tasks.register(MojangLicenseHelper.SHOW_LICENSE, DefaultTask.class);
 
         hideLicense.configure(task -> task.doLast(_task ->
-                MojangLicenseHelper.hide(project, extension.getMappingChannel().get(), extension.getMappingVersion().get())));
+                MojangLicenseHelper.hide(project, extension.getMappingChannel().getOrNull(), extension.getMappingVersion().getOrNull())));
 
         showLicense.configure(task -> task.doLast(_t ->
-                MojangLicenseHelper.show(project, extension.getMappingChannel().get(), extension.getMappingVersion().get())));
+                MojangLicenseHelper.show(project, extension.getMappingChannel().getOrNull(), extension.getMappingVersion().getOrNull())));
 
         extractSrg.configure(task -> task.getConfig().set(downloadMcpConfig.flatMap(DownloadMavenArtifact::getOutput)));
 
@@ -236,7 +237,14 @@ public class UserDevPlugin implements Plugin<Project> {
                 }
                 mcDependencies.remove(dep);
 
-                mcrepo = new MinecraftUserRepo(p, dep.getGroup(), dep.getName(), dep.getVersion(), new ArrayList<>(extension.getAccessTransformers().getFiles()), extension.getMappings().get());
+                String mappingsFull;
+                if ("none".equals(extension.getMappingChannel().getOrNull())) {
+                    mappingsFull = null;
+                    extension.mappings((String) null, null);
+                } else {
+                    mappingsFull = extension.getMappings().get();
+                }
+                mcrepo = new MinecraftUserRepo(p, dep.getGroup(), dep.getName(), dep.getVersion(), new ArrayList<>(extension.getAccessTransformers().getFiles()), mappingsFull);
                 String newDep = mcrepo.getDependencyString();
                 //p.getLogger().lifecycle("New Dep: " + newDep);
                 ExternalModuleDependency ext = (ExternalModuleDependency) p.getDependencies().create(newDep);
@@ -267,7 +275,7 @@ public class UserDevPlugin implements Plugin<Project> {
                     project.getLogger().error("DeobfRepo attempted to resolve an origin repo early but failed, this may cause issues with some IDEs");
                 }
             }
-            remapper.attachMappings(extension.getMappings().get());
+            remapper.attachMappings(extension.getMappings().getOrNull());
 
             // We have to add these AFTER our repo so that we get called first, this is annoying...
             new BaseRepo.Builder()
@@ -277,7 +285,7 @@ public class UserDevPlugin implements Plugin<Project> {
                     .add(MinecraftRepo.create(project)) //Provides vanilla extra/slim/data jars. These don't care about OBF names.
                     .attach(project);
 
-            MojangLicenseHelper.displayWarning(p, extension.getMappingChannel().get(), extension.getMappingVersion().get(), updateChannel, updateVersion);
+            MojangLicenseHelper.displayWarning(p, extension.getMappingChannel().getOrNull(), extension.getMappingVersion().getOrNull(), updateChannel, updateVersion);
 
             project.getRepositories().maven(e -> {
                 e.setUrl(Utils.MOJANG_MAVEN);

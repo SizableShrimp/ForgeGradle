@@ -52,6 +52,9 @@ public abstract class GenerateSRG extends DefaultTask {
 
     @TaskAction
     public void apply() throws IOException {
+        if (!getMappings().isPresent())
+            return;
+
         File names = findNames(getMappings().get());
         if (names == null)
             throw new IllegalStateException("Invalid mappings: " + getMappings() + " Could not find archive");

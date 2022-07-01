@@ -41,6 +41,9 @@ public abstract class DownloadMCPMappings extends DefaultTask {
 
     @TaskAction
     public void download() throws IOException {
+        if (!getMappings().isPresent())
+            return;
+
         File out = getMappingFile();
         File output = getOutput().get().getAsFile();
         this.setDidWork(out.exists());

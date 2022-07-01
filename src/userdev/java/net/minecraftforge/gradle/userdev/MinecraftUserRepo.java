@@ -130,6 +130,7 @@ public class MinecraftUserRepo extends BaseRepo {
     private final List<File> ATS;
     @Nullable
     private final String AT_HASH;
+    @Nullable
     private final String MAPPING;
     private final boolean isPatcher;
     private final Map<String, McpNames> mapCache = new HashMap<>();
@@ -162,7 +163,7 @@ public class MinecraftUserRepo extends BaseRepo {
      * Version Setup:
      *   [Version]_mapped_[mapping]_at_[AtHash]
      */
-    public MinecraftUserRepo(Project project, String group, String name, String version, List<File> ats, String mapping) {
+    public MinecraftUserRepo(Project project, String group, String name, String version, List<File> ats, @Nullable String mapping) {
         super(Utils.getCache(project, "minecraft_user_repo"), project.getLogger());
         this.project = project;
         this.GROUP = group;
@@ -241,7 +242,7 @@ public class MinecraftUserRepo extends BaseRepo {
         tokens.put("natives", extractNatives.getOutput().get().getAsFile().getAbsolutePath());
         tokens.put("mc_version", mcp.getMCVersion());
         tokens.put("mcp_version", mcp.getArtifact().getVersion());
-        tokens.put("mcp_mappings", MAPPING);
+        tokens.put("mcp_mappings", MAPPING == null ? "none_0" : MAPPING);
         tokens.put("mcp_to_srg", createSrgToMcp.getOutput().get().getAsFile().getAbsolutePath());
         if (parent != null && !parent.getModules().isEmpty()) {
             Configuration modulesCfg = project.getConfigurations().create("modules_userdev_resolver");

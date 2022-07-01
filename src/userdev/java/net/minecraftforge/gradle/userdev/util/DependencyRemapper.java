@@ -25,6 +25,7 @@ import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ExternalModuleDependency;
 import org.gradle.api.artifacts.FileCollectionDependency;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -67,7 +68,10 @@ public class DependencyRemapper {
         return newDep;
     }
 
-    public void attachMappings(String mappings) {
+    public void attachMappings(@Nullable String mappings) {
+        if (mappings == null)
+            return;
+
         mappingListeners.forEach(l -> l.accept(mappings));
     }
 

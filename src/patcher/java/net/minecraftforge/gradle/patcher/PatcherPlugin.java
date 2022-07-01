@@ -164,10 +164,10 @@ public class PatcherPlugin implements Plugin<Project> {
         });
 
         hideLicense.configure(task -> task.doLast(_task ->
-                MojangLicenseHelper.hide(project, extension.getMappingChannel().get(), extension.getMappingVersion().get())));
+                MojangLicenseHelper.hide(project, extension.getMappingChannel().getOrNull(), extension.getMappingVersion().getOrNull())));
 
         showLicense.configure(task -> task.doLast(_task ->
-                MojangLicenseHelper.show(project, extension.getMappingChannel().get(), extension.getMappingVersion().get())));
+                MojangLicenseHelper.show(project, extension.getMappingChannel().getOrNull(), extension.getMappingVersion().getOrNull())));
 
         release.configure(task -> task.dependsOn(sourcesJar, universalJar, userdevJar));
 
@@ -364,7 +364,7 @@ public class PatcherPlugin implements Plugin<Project> {
                 final PatcherPlugin parentPatcherPlugin = parent.getPlugins().findPlugin(PatcherPlugin.class);
 
                 if (parentMCPPlugin != null) {
-                    MojangLicenseHelper.displayWarning(p, extension.getMappingChannel().get(), extension.getMappingVersion().get(), updateChannel, updateVersion);
+                    MojangLicenseHelper.displayWarning(p, extension.getMappingChannel().getOrNull(), extension.getMappingVersion().getOrNull(), updateChannel, updateVersion);
                     final TaskProvider<SetupMCP> setupMCP = parentTasks.named("setupMCP", SetupMCP.class);
 
                     Provider<RegularFile> setupOutput = setupMCP.flatMap(SetupMCP::getOutput);
@@ -474,8 +474,8 @@ public class PatcherPlugin implements Plugin<Project> {
             project.getDependencies().add(MC_DEP_CONFIG, mcpParentExtension.getConfig()
                     .map(ver -> "net.minecraft:client:" + ver.getVersion() + ":extra"));
             // Add mappings so that it can be used by reflection tools.
-            project.getDependencies().add(MC_DEP_CONFIG, extension.getMappingChannel()
-                    .zip(extension.getMappingVersion(), MCPRepo::getMappingDep));
+            project.getDependencies().add(MC_DEP_CONFIG, extension.getMappingChannel().orElse("none")
+                    .zip(extension.getMappingVersion().orElse("0"), MCPRepo::getMappingDep));
 
             dlMCMetaConfig.configure(task -> task.getMCVersion().convention(extension.getMcVersion()));
 
