@@ -57,6 +57,7 @@ public class RunConfig extends GroovyObjectSupport implements Serializable {
 
     private final String name;
 
+    private Boolean prepareBuildsSources = null;
     private Boolean singleInstance = null;
 
     private String taskName, main, ideaModule, workDir;
@@ -64,7 +65,6 @@ public class RunConfig extends GroovyObjectSupport implements Serializable {
     private List<SourceSet> sources;
     private List<RunConfig> parents, children;
     private List<String> args, jvmArgs;
-    private boolean forceExit = true;
     private Boolean client; // so we can have it null
     private Boolean inheritArgs;
     private Boolean inheritJvmArgs;
@@ -101,6 +101,10 @@ public class RunConfig extends GroovyObjectSupport implements Serializable {
         }
 
         return taskName;
+    }
+
+    public final String getPrepareTaskName() {
+        return "prepare" + Utils.capitalize(this.getTaskName());
     }
 
     public final String getUniqueFileName() {
@@ -233,6 +237,18 @@ public class RunConfig extends GroovyObjectSupport implements Serializable {
         return singleInstance != null && singleInstance;
     }
 
+    public void prepareBuildsSources(boolean value) {
+        this.setPrepareBuildsSources(value);
+    }
+
+    public void setPrepareBuildsSources(boolean value) {
+        this.prepareBuildsSources = value;
+    }
+
+    public boolean isPrepareBuildsSources() {
+        return this.prepareBuildsSources != null && this.prepareBuildsSources;
+    }
+
     public void properties(Map<String, Object> map) {
         this.setProperties(map);
     }
@@ -291,18 +307,6 @@ public class RunConfig extends GroovyObjectSupport implements Serializable {
         }
 
         return workDir;
-    }
-
-    public void forceExit(boolean forceExit) {
-        this.setForceExit(forceExit);
-    }
-
-    public void setForceExit(boolean forceExit) {
-        this.forceExit = forceExit;
-    }
-
-    public boolean getForceExit() {
-        return this.forceExit;
     }
 
     public NamedDomainObjectContainer<ModConfig> mods(@SuppressWarnings("rawtypes") Closure closure) {
