@@ -97,7 +97,7 @@ public class EnvironmentChecks {
         if (ENABLE_GRADLE_CHECK) {
             logger.debug(ENV_CHECK, "Checking Gradle version");
             checkGradleRange(
-                    GradleVersion.version("7.1"),
+                    GradleVersion.version("7.5"),
                     null
             );
         } else {
