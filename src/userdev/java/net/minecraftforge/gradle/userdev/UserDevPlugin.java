@@ -21,7 +21,6 @@
 package net.minecraftforge.gradle.userdev;
 
 import com.google.common.collect.ImmutableList;
-import groovy.lang.Closure;
 import net.minecraftforge.gradle.common.tasks.ApplyMappings;
 import net.minecraftforge.gradle.common.tasks.ApplyRangeMap;
 import net.minecraftforge.gradle.common.tasks.DownloadAssets;
@@ -31,8 +30,11 @@ import net.minecraftforge.gradle.common.tasks.ExtractExistingFiles;
 import net.minecraftforge.gradle.common.tasks.ExtractMCPData;
 import net.minecraftforge.gradle.common.tasks.ExtractNatives;
 import net.minecraftforge.gradle.common.tasks.ExtractRangeMap;
+import net.minecraftforge.gradle.common.util.AccessTransformerUtils;
 import net.minecraftforge.gradle.common.util.BaseRepo;
 import net.minecraftforge.gradle.common.util.EnvironmentChecks;
+import net.minecraftforge.gradle.common.util.MavenArtifactDownloader;
+import net.minecraftforge.gradle.common.util.MinecraftExtension;
 import net.minecraftforge.gradle.common.util.MinecraftRepo;
 import net.minecraftforge.gradle.common.util.MojangLicenseHelper;
 import net.minecraftforge.gradle.common.util.Utils;
@@ -41,27 +43,31 @@ import net.minecraftforge.gradle.mcp.ChannelProvidersExtension;
 import net.minecraftforge.gradle.mcp.MCPRepo;
 import net.minecraftforge.gradle.mcp.tasks.DownloadMCPMappings;
 import net.minecraftforge.gradle.mcp.tasks.GenerateSRG;
-import net.minecraftforge.gradle.userdev.dependency.DependencyFilter;
 import net.minecraftforge.gradle.userdev.jarjar.JarJarProjectExtension;
 import net.minecraftforge.gradle.userdev.tasks.JarJar;
 import net.minecraftforge.gradle.userdev.tasks.RenameJarInPlace;
+import net.minecraftforge.gradle.userdev.transforms.AccessTransformAction;
 import net.minecraftforge.gradle.userdev.util.DeobfuscatingRepo;
 import net.minecraftforge.gradle.userdev.util.Deobfuscator;
 import net.minecraftforge.gradle.userdev.util.DependencyRemapper;
 import net.minecraftforge.srgutils.IMappingFile;
-
 import org.apache.commons.lang3.StringUtils;
-import org.gradle.api.*;
+import org.gradle.api.DefaultTask;
+import org.gradle.api.NamedDomainObjectContainer;
+import org.gradle.api.Plugin;
+import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.DependencySet;
 import org.gradle.api.artifacts.ExternalModuleDependency;
+import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository.MetadataSources;
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition;
+import org.gradle.api.attributes.Attribute;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.SourceDirectorySet;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.plugins.JavaPlugin;
-import org.gradle.api.plugins.JavaPluginConvention;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
@@ -73,18 +79,19 @@ import org.gradle.api.tasks.bundling.Jar;
 import org.gradle.api.tasks.compile.JavaCompile;
 import org.gradle.language.base.plugins.LifecycleBasePlugin;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.jar.Attributes;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
-import javax.annotation.Nonnull;
-
 public class UserDevPlugin implements Plugin<Project> {
+    public static final Attribute<Boolean> ACCESS_TRANSFORMED_ATTRIBUTE =
+            Attribute.of("net.minecraftforge.gradle.userdev.accesstransformed", Boolean.class);
 
     public static final String JAR_JAR_TASK_NAME = "jarJar";
     public static final String JAR_JAR_GROUP = "jarjar";
@@ -94,7 +101,6 @@ public class UserDevPlugin implements Plugin<Project> {
     public static final String MINECRAFT = "minecraft";
     public static final String OBF = "__obfuscated";
 
-    @SuppressWarnings("unchecked")
     @Override
     public void apply(@Nonnull Project project) {
         EnvironmentChecks.checkEnvironment(project);
@@ -133,6 +139,9 @@ public class UserDevPlugin implements Plugin<Project> {
         final TaskProvider<DownloadAssets> downloadAssets = tasks.register("downloadAssets", DownloadAssets.class);
         final TaskProvider<DefaultTask> hideLicense = tasks.register(MojangLicenseHelper.HIDE_LICENSE, DefaultTask.class);
         final TaskProvider<DefaultTask> showLicense = tasks.register(MojangLicenseHelper.SHOW_LICENSE, DefaultTask.class);
+
+        AccessTransformerUtils.configureProcessResources(extension, tasks, createMcpToSrg.flatMap(task -> task.getOutput().getAsFile()));
+        registerAccessTransform(project, extension, createSrgToMcp);
 
         hideLicense.configure(task -> task.doLast(_task ->
                 MojangLicenseHelper.hide(project, extension.getMappingChannel().get(), extension.getMappingVersion().get())));
@@ -240,6 +249,8 @@ public class UserDevPlugin implements Plugin<Project> {
                 String newDep = mcrepo.getDependencyString();
                 //p.getLogger().lifecycle("New Dep: " + newDep);
                 ExternalModuleDependency ext = (ExternalModuleDependency) p.getDependencies().create(newDep);
+                // Request the AT attribute as TRUE, so it gets transformed by our transform action
+                ext.attributes(attributes -> attributes.attribute(ACCESS_TRANSFORMED_ATTRIBUTE, Boolean.TRUE));
 
                 if (MinecraftUserRepo.CHANGING_USERDEV) {
                     ext.setChanging(true);
@@ -368,5 +379,44 @@ public class UserDevPlugin implements Plugin<Project> {
         });
 
         project.getArtifacts().add(JAR_JAR_DEFAULT_CONFIGURATION_NAME, project.getTasks().named(JAR_JAR_TASK_NAME));
+    }
+
+    private static void registerAccessTransform(Project project, MinecraftExtension extension, TaskProvider<GenerateSRG> createSrgToMcp) {
+        final DependencyHandler dependencies = project.getDependencies();
+
+        final Provider<String> toolCoordinates = project.getProviders().provider(() -> Utils.ACCESSTRANSFORMER);
+        //noinspection ConstantConditions Provider#map accepts a Transformer which returns null
+        final Provider<File> toolFile = toolCoordinates.map(toolStr -> MavenArtifactDownloader.gradle(project, toolStr, false));
+
+        final Provider<String> mainClass = toolFile.map(file -> {
+            // Locate main class in jar file
+            try (JarFile jarFile = new JarFile(file)) {
+                return jarFile.getManifest().getMainAttributes().getValue(Attributes.Name.MAIN_CLASS);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Unable to get main class attribute from tool jar " + file, e);
+            }
+        });
+
+        dependencies.attributesSchema(attributesSchema -> attributesSchema.attribute(ACCESS_TRANSFORMED_ATTRIBUTE));
+
+        // Default value of attribute for jar artifact types is FALSE
+        dependencies.artifactTypes(artifactTypes ->
+                artifactTypes.getByName(ArtifactTypeDefinition.JAR_TYPE, def ->
+                        def.getAttributes().attribute(ACCESS_TRANSFORMED_ATTRIBUTE, Boolean.FALSE)));
+
+        dependencies.registerTransform(AccessTransformAction.class, spec -> {
+            //noinspection UnstableApiUsage
+            spec.getFrom().attribute(ACCESS_TRANSFORMED_ATTRIBUTE, Boolean.FALSE).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE);
+            //noinspection UnstableApiUsage
+            spec.getTo().attribute(ACCESS_TRANSFORMED_ATTRIBUTE, Boolean.TRUE).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE);
+            spec.parameters(parameters -> {
+                parameters.getAccessTransformers().from(extension.getAccessTransformers());
+                parameters.getClasspath().from(toolFile);
+                parameters.getMappings().set(createSrgToMcp.flatMap(GenerateSRG::getOutput));
+                parameters.getATArgumentPrefix().set("--atFile");
+                parameters.getArguments().value(ImmutableList.of("--inJar", "{input}", "--outJar", "{output}"));
+                parameters.getMainClass().set(mainClass);
+            });
+        });
     }
 }
