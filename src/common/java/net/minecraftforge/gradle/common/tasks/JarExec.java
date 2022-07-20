@@ -117,6 +117,7 @@ public abstract class JarExec extends DefaultTask {
 
         final boolean debug = getDebug().get();
         final List<String> args = filterArgs(getArgs().get());
+        final List<String> jvmArgs = getJvmArgs().getOrNull();
         final ConfigurableFileCollection classpath = getProject().files(getToolJar(), getClasspath());
         final File workingDirectory = workDir.get().getAsFile();
 
@@ -125,6 +126,8 @@ public abstract class JarExec extends DefaultTask {
                 spec.setExecutable(getEffectiveExecutable());
                 spec.setDebug(debug);
                 spec.setArgs(args);
+                if (jvmArgs != null)
+                    spec.setJvmArgs(jvmArgs);
                 spec.setClasspath(classpath);
                 spec.setWorkingDir(workingDirectory);
                 spec.getMainClass().set(mainClass);
@@ -239,6 +242,10 @@ public abstract class JarExec extends DefaultTask {
 
     @Input
     public abstract ListProperty<String> getArgs();
+
+    @Input
+    @Optional
+    public abstract ListProperty<String> getJvmArgs();
 
     @Input
     @Optional

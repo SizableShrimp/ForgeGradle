@@ -67,6 +67,7 @@ import org.gradle.api.attributes.Attribute;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.SourceDirectorySet;
 import org.gradle.api.logging.Logger;
+import org.gradle.api.plugins.ExtraPropertiesExtension;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.provider.Property;
@@ -297,10 +298,17 @@ public class UserDevPlugin implements Plugin<Project> {
             project.getRepositories().mavenCentral(); //Needed for MCP Deps
             mcrepo.validate(minecraft, extension.getRuns().getAsMap(), extractNatives.get(), downloadAssets.get(), createSrgToMcp.get()); //This will set the MC_VERSION property.
 
-            String mcVer = (String) project.getExtensions().getExtraProperties().get("MC_VERSION");
-            String mcpVer = (String) project.getExtensions().getExtraProperties().get("MCP_VERSION");
-            // TODO: convert to constant and use String.format
-            downloadMcpConfig.configure(t -> t.setArtifact("de.oceanlabs.mcp:mcp_config:" + mcpVer + "@zip"));
+            ExtraPropertiesExtension extraProperties = project.getExtensions().getExtraProperties();
+            String mcVer = (String) extraProperties.get("MC_VERSION");
+            String mcpVer = extraProperties.has("MCP_VERSION") ? (String) extraProperties.get("MCP_VERSION") : null;
+            if (mcpVer != null) {
+                downloadMcpConfig.configure(t -> t.setArtifact(Utils.getMCPConfigArtifact(mcpVer)));
+            } else {
+                extractSrg.configure(task -> {
+                    task.getConfig().set((File) null);
+                    task.getVersion().set(mcVer);
+                });
+            }
             downloadMCMeta.configure(t -> t.getMCVersion().convention(mcVer));
 
             // Register reobfJar for the 'jar' task

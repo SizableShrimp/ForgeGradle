@@ -113,7 +113,7 @@ public class MojangLicenseHelper {
 
     private static Optional<String> getOfficialLicense(Project project, String version) {
         String minecraftVersion = MinecraftRepo.getMCVersion(version);
-        String artifact = "net.minecraft:client:" + minecraftVersion + ":mappings@txt";
+        String artifact = Utils.getOfficialMappingsArtifact("client", minecraftVersion);
 
         File client = MavenArtifactDownloader.generate(project, artifact, true);
 
