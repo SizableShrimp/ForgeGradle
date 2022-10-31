@@ -22,10 +22,55 @@ package net.minecraftforge.gradle.common.util.runs;
 
 import net.minecraftforge.gradle.common.util.RunConfig;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.ListProperty;
+import org.gradle.api.provider.MapProperty;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.OutputFile;
+import org.gradle.api.tasks.TaskAction;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public abstract class MinecraftPrepareRunTask extends DefaultTask {
+    @Input
+    @Optional
+    public abstract Property<Boolean> getGenerateBslConfig();
+
+    @Input
+    @Optional
+    protected abstract MapProperty<String, String> getSystemProperties();
+
+    @Input
+    @Optional
+    protected abstract ListProperty<String> getLaunchArguments();
+
+    @OutputFile
+    @Optional
+    public abstract RegularFileProperty getBslConfigOutput();
+
     public MinecraftPrepareRunTask() {
         this.setGroup(RunConfig.RUNS_GROUP);
         this.setImpliesSubProjects(true); // Preparing the game in the current project and child projects is a bad idea
+    }
+
+    @TaskAction
+    public void exec() throws IOException {
+        if (getGenerateBslConfig().getOrElse(false) == Boolean.TRUE && getBslConfigOutput().isPresent()) {
+            Map<String, String> systemProperties = getSystemProperties().get();
+            List<String> launchArgs = getLaunchArguments().get();
+
+            List<String> output = new ArrayList<>();
+
+            systemProperties.forEach((k, v) -> output.add(String.format("system_property: %s=%s", k, v)));
+            launchArgs.forEach(arg -> output.add(String.format("arg: %s", arg)));
+
+            Files.write(getBslConfigOutput().get().getAsFile().toPath(), output);
+        }
     }
 }

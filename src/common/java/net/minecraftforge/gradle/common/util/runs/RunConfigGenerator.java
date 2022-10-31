@@ -39,6 +39,8 @@ import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.ConfigurationContainer;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.plugins.JavaPluginExtension;
+import org.gradle.api.provider.MapProperty;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskProvider;
 import org.w3c.dom.Document;
@@ -191,6 +193,8 @@ public abstract class RunConfigGenerator {
         tokens.put("minecraft_classpath_file",
                 Suppliers.memoize(() -> classpathFileWriter.apply("minecraftClasspath", minecraftClasspath)));
 
+        tokens.put("bsl_config_file", Suppliers.memoize(() -> new File(classpathFolder, runConfig.getUniqueFileName() + "_bslConfig.txt").getAbsolutePath()));
+
         // *Grumbles about having to keep a workaround for a "dummy" hack that should have never existed*
         runConfig.getEnvironment().compute("MOD_CLASSES", (key, value) ->
                 Strings.isNullOrEmpty(value) || "dummy".equals(value) ? "{source_roots}" : value);
@@ -229,6 +233,18 @@ public abstract class RunConfigGenerator {
             if (runConfig.isPrepareBuildsSources()) {
                 task.dependsOn(runConfig.getAllSources().stream().map(SourceSet::getClassesTaskName).toArray());
             }
+            if (runConfig.getUseBslConfig()) {
+                task.getGenerateBslConfig().set(true);
+                MapProperty<String, Supplier<String>> tokensProperty = project.getObjects().mapProperty(String.class, cast(Supplier.class));
+                // BSL Config cannot use {source_roots} so that we can have a shared file for all IDEs for a given run config
+                tokensProperty.set(project.provider(() -> configureTokensLazy(project, runConfig, Stream.of(), getMinecraftArtifacts(project).getFiles(),
+                        getRuntimeClasspathArtifacts(project).getFiles())
+                ));
+                tokensProperty.finalizeValueOnRead();
+                runConfig.getProperties().forEach((k, v) -> task.getSystemProperties().put(k, tokensProperty.map(tokens -> runConfig.replace(tokens, v))));
+                runConfig.getArgs().forEach(arg -> task.getLaunchArguments().add(tokensProperty.map(tokens -> runConfig.replace(tokens, arg))));
+                task.getBslConfigOutput().set(project.getLayout().file(tokensProperty.map(tokens -> new File(tokens.get("bsl_config_file").get()))));
+            }
         });
 
         return project.getTasks().register(runConfig.getTaskName(), MinecraftRunTask.class, task -> {
@@ -245,6 +261,11 @@ public abstract class RunConfigGenerator {
         });
     }
 
+    @SuppressWarnings("unchecked")
+    private static <T> Class<T> cast(Class<?> clazz) {
+        return (Class<T>) clazz;
+    }
+
     // Workaround for the issue where file paths with spaces are improperly split into multiple args.
     protected static String fixupArg(String replace) {
         if (replace.startsWith("\""))
@@ -257,7 +278,7 @@ public abstract class RunConfigGenerator {
     }
 
     protected static String getArgs(RunConfig runConfig, Map<String, ?> updatedTokens) {
-        return getArgsStream(runConfig, updatedTokens, true).collect(Collectors.joining(" "));
+        return runConfig.getUseBslConfig() ? "" : getArgsStream(runConfig, updatedTokens, true).collect(Collectors.joining(" "));
     }
 
     protected static Stream<String> getArgsStream(RunConfig runConfig, Map<String, ?> updatedTokens, boolean wrapSpaces) {
@@ -271,14 +292,20 @@ public abstract class RunConfigGenerator {
     }
 
     private static Stream<String> getJvmArgsStream(RunConfig runConfig, List<String> additionalClientArgs, Map<String, ?> updatedTokens) {
-        final Stream<String> propStream = Stream.concat(
-                runConfig.getProperties().entrySet().stream()
-                        .map(kv -> String.format("-D%s=%s", kv.getKey(), runConfig.replace(updatedTokens, kv.getValue()))),
-                runConfig.getJvmArgs().stream().map(value -> runConfig.replace(updatedTokens, value))).map(RunConfigGenerator::fixupArg);
-        if (runConfig.isClient()) {
-            return Stream.concat(propStream, additionalClientArgs.stream());
+        Stream<String> propStream = runConfig.getJvmArgs().stream().map(value -> runConfig.replace(updatedTokens, value));
+        if (!runConfig.getUseBslConfig()) {
+            propStream = Stream.concat(
+                    runConfig.getProperties().entrySet().stream()
+                            .map(kv -> String.format("-D%s=%s", kv.getKey(), runConfig.replace(updatedTokens, kv.getValue()))),
+                    propStream);
         }
-        return propStream;
+        propStream = propStream.map(RunConfigGenerator::fixupArg);
+
+        return runConfig.isClient() ? Stream.concat(propStream, additionalClientArgs.stream()) : propStream;
+    }
+
+    protected static Stream<String> getSystemPropertiesStream(RunConfig runConfig, Map<String, ?> updatedTokens) {
+        return runConfig.getProperties().entrySet().stream().map(kv -> String.format("%s=%s", kv.getKey(), runConfig.replace(updatedTokens, kv.getValue())));
     }
 
     abstract static class XMLConfigurationBuilder extends RunConfigGenerator {

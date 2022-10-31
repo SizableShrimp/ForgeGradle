@@ -178,6 +178,22 @@ public class RunConfig extends GroovyObjectSupport implements Serializable {
         return inheritJvmArgs != Boolean.FALSE;
     }
 
+    public void useBslConfig(boolean value) {
+        setUseBslConfig(value);
+    }
+
+    public void setUseBslConfig(boolean value) {
+        if (value) {
+            this.property("bsl.config", "{bsl_config_file}");
+        } else {
+            getProperties().remove("bsl.config");
+        }
+    }
+
+    public boolean getUseBslConfig() {
+        return this.props != null && this.props.containsKey("bsl.config");
+    }
+
     public void buildAllProjects(boolean value) {
         setBuildAllProjects(value);
     }
