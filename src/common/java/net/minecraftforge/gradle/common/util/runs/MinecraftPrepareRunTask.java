@@ -67,7 +67,10 @@ public abstract class MinecraftPrepareRunTask extends DefaultTask {
 
             List<String> output = new ArrayList<>();
 
-            systemProperties.forEach((k, v) -> output.add(String.format("system_property: %s=%s", k, v)));
+            systemProperties.forEach((k, v) -> {
+                if (!"bsl.config".equals(k))
+                    output.add(String.format("system_property: %s=%s", k, v));
+            });
             launchArgs.forEach(arg -> output.add(String.format("arg: %s", arg)));
 
             Files.write(getBslConfigOutput().get().getAsFile().toPath(), output);

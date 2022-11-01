@@ -63,9 +63,9 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -292,16 +292,21 @@ public abstract class RunConfigGenerator {
     }
 
     private static Stream<String> getJvmArgsStream(RunConfig runConfig, List<String> additionalClientArgs, Map<String, ?> updatedTokens) {
-        Stream<String> propStream = runConfig.getJvmArgs().stream().map(value -> runConfig.replace(updatedTokens, value));
-        if (!runConfig.getUseBslConfig()) {
-            propStream = Stream.concat(
-                    runConfig.getProperties().entrySet().stream()
-                            .map(kv -> String.format("-D%s=%s", kv.getKey(), runConfig.replace(updatedTokens, kv.getValue()))),
-                    propStream);
+        List<String> jvmArgs = new ArrayList<>();
+        runConfig.getJvmArgs().forEach(value -> jvmArgs.add(runConfig.replace(updatedTokens, value)));
+        if (runConfig.getUseBslConfig()) {
+            jvmArgs.add(0, "-Dbsl.config=" + runConfig.replace(updatedTokens, "{bsl_config_file}"));
+        } else {
+            List<String> systemProperties = runConfig.getProperties().entrySet().stream()
+                    .map(kv -> String.format("-D%s=%s", kv.getKey(), runConfig.replace(updatedTokens, kv.getValue())))
+                    .collect(Collectors.toList());
+            jvmArgs.addAll(0, systemProperties);
         }
-        propStream = propStream.map(RunConfigGenerator::fixupArg);
 
-        return runConfig.isClient() ? Stream.concat(propStream, additionalClientArgs.stream()) : propStream;
+        if (runConfig.isClient())
+            jvmArgs.addAll(additionalClientArgs);
+
+        return jvmArgs.stream().map(RunConfigGenerator::fixupArg);
     }
 
     protected static Stream<String> getSystemPropertiesStream(RunConfig runConfig, Map<String, ?> updatedTokens) {
